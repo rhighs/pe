@@ -27,19 +27,15 @@ static bool is_perm(int v, int t)
 int main(void)
 {
     constexpr int N = 10000;
+    constexpr int a = 3330;
     auto p = primes<N>();
-    int start = 1000;
-    int additive = 3330;
-
     std::vector<int> candidates;
-
-    for (int i=0; i < N; i++) {
-        if (p[i] && p[i + additive] && p[i + additive * 2]) {
-            int ii = i + additive;
-            int iii = ii + additive;
+    for (int i=1488; i<N; i++) {
+        if (p[i] && p[i+a] && p[i+a+a]) {
+            int ii = i+a;
+            int iii = ii+a;
             if (is_perm(i, ii) && is_perm(i, iii)) fmt::print("{}{}{}\n", i, ii, iii);
         }
     }
-
     return 0;
 }
