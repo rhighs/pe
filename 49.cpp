@@ -1,8 +1,4 @@
-#include <stdio.h>
 #include <math.h>
-#include <vector>
-#include <stdio.h>
-#include <assert.h>
 #include <fmt/printf.h>
 
 template <size_t N>
@@ -29,7 +25,6 @@ int main(void)
     constexpr int N = 10000;
     constexpr int a = 3330;
     auto p = primes<N>();
-    std::vector<int> candidates;
     for (int i=1488; i<N; i++) {
         if (p[i] && p[i+a] && p[i+a+a]) {
             int ii = i+a;
