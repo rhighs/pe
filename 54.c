@@ -1079,16 +1079,22 @@ u8 straight(HAND_CHECK_ARGS) {
         }
         pos += HAND_STRIDE;
     }
-    assert(i==5);
-    for (i=0; i<5; i++) {
-        u8 found = 0;
-        for (j=0; j<5; j++) {
-            if (j==i) continue;
-            if (abs(values[i]-values[j]) == 1) { found=1; break; }
-        }
-        if (!found) return 0;
-    }
-    return 1;
+
+    i=0;
+    u8 __found_values[15] = {0};
+    __found_values[values[i++]] = 1;
+    __found_values[values[i++]] = 1;
+    __found_values[values[i++]] = 1;
+    __found_values[values[i++]] = 1;
+    __found_values[values[i++]] = 1;
+
+    u32 starting = 0;
+    while (__found_values[starting] != 1) starting++;
+    return __found_values[starting++]
+        && __found_values[starting++]
+        && __found_values[starting++]
+        && __found_values[starting++]
+        && __found_values[starting++];
 }
 
 u8 four_of_a_kind(HAND_CHECK_ARGS) {
@@ -1193,16 +1199,16 @@ u32 kind(char *hand) {
     return HIGH_CARD;
 }
 
-u8 highest_value(const char *hand, u8 *values, i32 order, u8 must_be) {
-    u8 i=14;
-    for (; i>=0 && order >= 0; i--) {
+u8 highest_value(const char *hand, u8 *values, u8 must_be) {
+    i8 i=14;
+    for (; i>=0; i--) {
         if (must_be == 0) {
-            if(values[i]) { order--; values[i] = 0; }
+            if(values[i]) { values[i] = 0; return i; }
         } else {
-            if (values[i] == must_be)  { order--; values[i] = 0; }
+            if (values[i] == must_be)  { values[i] = 0; return i; }
         }
     }
-    return i;
+    return 0;
 }
 
 void to_values(char *hand, u8 *values) { 
@@ -1228,37 +1234,77 @@ i32 main(void) {
         u32 p1 = kind(first_hand_ptr);
         u32 p2 = kind(second_hand_ptr);
 
-        u8 p1_values[15] = {0};
-        u8 p2_values[15] = {0};
-
         if (p1 > p2) {
             p1_score++;
         } else if (p1 == p2) {
+            u8 p1_values[15] = {0};
+            u8 p2_values[15] = {0};
+
+            to_values(first_hand_ptr,  p1_values);
+            to_values(second_hand_ptr, p2_values);
+
+            u32 old_p1 = p1_score;
+
             u8 type = p1;
             switch (type) {
-            case HIGH_CARD:
-                for (u32 i = 0; i < 5; i++) {
-                    to_values(first_hand_ptr,  p1_values);
-                    to_values(second_hand_ptr, p2_values);
-                    u8 s1 = highest_value(first_hand_ptr, p1_values, i, 0);
-                    u8 s2 = highest_value(second_hand_ptr, p2_values, i, 0);
-                    if (s1 > s2) {
-                        p1_score++;
-                        break;
-                    } else if (s2 > s1) {
-                        break;
-                    }
+            case HIGH_CARD: 
+            case ONE_PAIR: 
+            case THREE_OF_A_KIND: {
+                u8 s1 = highest_value(first_hand_ptr, p1_values, type);
+                u8 s2 = highest_value(second_hand_ptr, p2_values, type);
+                while (s1 == s2 && s1 != 0) {
+                    s1 = highest_value(first_hand_ptr, p1_values, 1);
+                    s2 = highest_value(second_hand_ptr, p2_values, 1);
                 }
-                break;
-            case ONE_PAIR:
-                to_values(first_hand_ptr,  p1_values);
-                to_values(second_hand_ptr, p2_values);
-                u8 s1 = highest_value(first_hand_ptr, p1_values,  0, 2);
-                u8 s2 = highest_value(second_hand_ptr, p2_values, 0, 2);
                 if (s1 > s2) {
                     p1_score++;
                 }
                 break;
+            }
+
+            case FLUSH:
+            case STRAIGHT_FLUSH:
+            case STRAIGHT: {
+                u32 sum_1 = 0;
+                u32 sum_2 = 0;
+                for (u32 i=0; i<5; i++) {
+                    sum_1 += highest_value(first_hand_ptr, p1_values, 1);
+                    sum_2 += highest_value(second_hand_ptr, p2_values, 1);
+                }
+                if (sum_1 > sum_2) p1_score++;
+                break;
+            }
+
+            case FULL_HOUSE: {
+                u8 s1_1 = highest_value(first_hand_ptr, p1_values, 3);
+                u8 s1_2 = highest_value(first_hand_ptr, p1_values, 2);
+                u8 s2_1 = highest_value(second_hand_ptr, p2_values, 3);
+                u8 s2_2 = highest_value(second_hand_ptr, p2_values, 2);
+                if (s1_1 > s2_1 || (s1_1 == s2_1 && s1_2 > s2_2)) p1_score++;
+                break;
+            }
+
+            case TWO_PAIRS: {
+                u8 s1_1 = highest_value(first_hand_ptr, p1_values, 2);
+                u8 s1_2 = highest_value(first_hand_ptr, p1_values, 2);
+                u8 s2_1 = highest_value(second_hand_ptr, p2_values, 2);
+                u8 s2_2 = highest_value(second_hand_ptr, p2_values, 2);
+                if (s1_1 + s1_2 > s2_1 + s2_2
+                        || (s1_1 + s1_2 == s2_1 + s2_2
+                            && highest_value(first_hand_ptr, p1_values, 1)
+                            > highest_value(second_hand_ptr, p2_values, 1)))
+                    p1_score++;
+                break;
+            }
+
+            case FOUR_OF_A_KIND: {
+                u8 s1 = highest_value(first_hand_ptr,  p1_values, 4);
+                u8 s2 = highest_value(second_hand_ptr, p2_values, 4);
+                if (s1 > s2 || (s1 == s2 && highest_value(first_hand_ptr, p1_values, 1)
+                            > highest_value(second_hand_ptr, p2_values, 1)))
+                    p1_score++;
+                break;
+            }
             }
         }
 
@@ -1266,6 +1312,6 @@ i32 main(void) {
         second_hand_ptr += (HAND_LEN + 1) * 2;
     }
 
-    printf("p1: %d\n", p1_score);
+    printf("score = %d\n", p1_score);
     return 0;
 }
