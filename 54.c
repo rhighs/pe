@@ -1033,7 +1033,7 @@ AS KD 3D JD 8H 7C 8C 5C QD 6C";
 #define HAND_STRIDE 3
 #define HAND_LEN 2 * 5 + 4
 
-#define HAND_CHECK_ARGS const char *hand, u32 *values_left, u32 *value
+#define HAND_CHECK_ARGS const char *hand
 
 i32 abs(i32 value) {
     if (value < 0) {
@@ -1062,7 +1062,7 @@ u8 royal_flush(HAND_CHECK_ARGS) {
         if (!found) return 0;
     }
 
-    return flush(hand, values_left, NULL);
+    return flush(hand);
 }
 
 u8 straight(HAND_CHECK_ARGS) {
@@ -1088,15 +1088,7 @@ u8 straight(HAND_CHECK_ARGS) {
         }
         if (!found) return 0;
     }
-    for (i=0; i<5; i++)
-        *value += values[i];
-    for (i=0; i<15; i++)
-        values_left[i] = 0;
     return 1;
-}
-
-u8 straight_flush(HAND_CHECK_ARGS) {
-    return straight(hand, values_left, value) && flush(hand, values_left, value);
 }
 
 u8 four_of_a_kind(HAND_CHECK_ARGS) {
@@ -1114,15 +1106,8 @@ u8 four_of_a_kind(HAND_CHECK_ARGS) {
     }
 
     u8 found = 0;
-    for (u32 i=0; i<15; i++) {
-        if (values[i] == 4) { *value += i * 4; found = 1; }
-    }
-    if (found) {
-        for (u32 i=0; i<15; i++) {
-            values_left[i] = 0;
-            if (values[i] == 1) { values_left[i] = 1; }
-        }
-    }
+    for (u32 i=0; i<15; i++)
+        if (values[i] == 4) { found = 1; break; }
     return found;
 }
 
@@ -1141,15 +1126,8 @@ u8 three_of_a_kind(HAND_CHECK_ARGS) {
     }
 
     u8 found = 0;
-    for (u32 i=0; i<15; i++) {
-        if (values[i] == 3) { *value += i * 3; values[i]=0; found = 1; }
-    }
-    if (found) {
-        for (u32 i=0; i<15; i++) {
-            values_left[i] = 0;
-            if (values[i] != 0) values_left[i] = 1;
-        }
-    }
+    for (u32 i=0; i<15; i++)
+        if (values[i] == 3) { values[i]=0; found = 1; break; }
     return found;
 }
 
@@ -1168,15 +1146,8 @@ u8 two_pairs(HAND_CHECK_ARGS) {
     }
     u8 pairs = 0;
     for (u32 i=0; i<15; i++) 
-        if (values[i] == 2) { *value += i * 2; pairs++; }
-    u8 found = pairs == 2;
-    if (found) {
-        for (u32 i=0; i<15; i++) {
-            values_left[i] = 0;
-            if (values[i] == 1) { values_left[i] = 1; }
-        }
-    }
-    return found;
+        if (values[i] == 2) pairs++;
+    return pairs == 2;
 }
 
 u8 one_pair(HAND_CHECK_ARGS) {
@@ -1196,29 +1167,45 @@ u8 one_pair(HAND_CHECK_ARGS) {
     u8 found = 0;
     for (u32 i=0; i<15; i++) {
         if (values[i] == 2) {
-            *value += i * 2;
             values[i] = 0;
             found = 1;
             break;
         }
     }
 
-    if (found) {
-        for (u32 i=0; i<15; i++) {
-            values_left[i] = 0;
-            if (values[i] != 0) values_left[i] = 1;
-        }
-    }
     return found;
 }
 
-u8 full_house(HAND_CHECK_ARGS) {
-    u32 v = 0;
-    return three_of_a_kind(hand, values_left, value) && one_pair(hand, values_left, &v);
+u8 straight_flush(HAND_CHECK_ARGS) { return straight(hand) && flush(hand); }
+
+u8 full_house(HAND_CHECK_ARGS) { return three_of_a_kind(hand) && one_pair(hand); }
+
+u32 kind(char *hand) {
+    if (royal_flush(hand))      return ROYAL_FLUSH;
+    if (straight_flush(hand))   return STRAIGHT_FLUSH;
+    if (four_of_a_kind(hand))   return FOUR_OF_A_KIND;
+    if (full_house(hand))       return FULL_HOUSE;
+    if (flush(hand))            return FLUSH;
+    if (straight(hand))         return STRAIGHT;
+    if (three_of_a_kind(hand))  return THREE_OF_A_KIND;
+    if (two_pairs(hand))        return TWO_PAIRS;
+    if (one_pair(hand))         return ONE_PAIR;
+    return HIGH_CARD;
 }
 
-u8 highest_value(const char *hand) {
-    u8 values[15] = {0};
+u8 highest_value(const char *hand, u8 *values, i32 order, u8 must_be) {
+    u8 i=14;
+    for (; i>=0 && order >= 0; i--) {
+        if (must_be == 0) {
+            if(values[i]) { order--; values[i] = 0; }
+        } else {
+            if (values[i] == must_be)  { order--; values[i] = 0; }
+        }
+    }
+    return i;
+}
+
+void to_values(char *hand, u8 *values) { 
     for (u32 pos = 0; pos<HAND_LEN;) {
         switch (hand[pos]) {
             case TEN:   values[10]++; break;
@@ -1230,32 +1217,6 @@ u8 highest_value(const char *hand) {
         }
         pos += HAND_STRIDE;
     }
-    for (u8 i=14; i>=0; i--) if (values[i] != 0) return i;
-    return 0;
-}
-
-u32 kind(char *hand, u32 values_left[15]) {
-
-    u32 value = 0;
-    u32 *value_ptr = &value;
-    if ((value=0, royal_flush(hand,     values_left, value_ptr))) return 100 * ROYAL_FLUSH + value;
-    if ((value=0, straight_flush(hand,  values_left, value_ptr))) return 100 * STRAIGHT_FLUSH + value;
-    if ((value=0, four_of_a_kind(hand,  values_left, value_ptr))) return 100 * FOUR_OF_A_KIND + value;
-    if ((value=0, full_house(hand,      values_left, value_ptr))) return 100 * FULL_HOUSE + value;
-    if ((value=0, flush(hand,           values_left, value_ptr))) return 100 * FLUSH + value;
-    if ((value=0, straight(hand,        values_left, value_ptr))) return 100 * STRAIGHT + value;
-    if ((value=0, three_of_a_kind(hand, values_left, value_ptr))) return 100 * THREE_OF_A_KIND + value;
-    if ((value=0, two_pairs(hand,       values_left, value_ptr))) return 100 * TWO_PAIRS + value;
-    if ((value=0, one_pair(hand,        values_left, value_ptr))) return 100 * ONE_PAIR + value;
-
-    return highest_value(hand);
-}
-
-u32 __highest_value(u32 values_left[15]) {
-    for (i32 i=14; i>=0; i--) {
-        if (values_left[i] != 0) return i;
-    }
-    return 0;
 }
 
 i32 main(void) {
@@ -1263,24 +1224,45 @@ i32 main(void) {
     char *second_hand_ptr = first_hand_ptr + (HAND_LEN + 1);
 
     u32 p1_score = 0;
-    u32 x = 0;
     while (first_hand_ptr < hands + sizeof(hands)) {
-        u32 p1_values_left[15] = {0};
-        u32 p2_values_left[15] = {0};
-        u32 p1 = kind(first_hand_ptr, p1_values_left);
-        u32 p2 = kind(second_hand_ptr, p2_values_left);
+        u32 p1 = kind(first_hand_ptr);
+        u32 p2 = kind(second_hand_ptr);
 
-        printf("p1: %d, p2: %d\n", p1, p2);
+        u8 p1_values[15] = {0};
+        u8 p2_values[15] = {0};
 
         if (p1 > p2) {
             p1_score++;
-        } else if (p1 == p2
-                && __highest_value(p1_values_left)
-                    > __highest_value(p2_values_left)) {
-            p1_score++;
+        } else if (p1 == p2) {
+            u8 type = p1;
+            switch (type) {
+            case HIGH_CARD:
+                for (u32 i = 0; i < 5; i++) {
+                    to_values(first_hand_ptr,  p1_values);
+                    to_values(second_hand_ptr, p2_values);
+                    u8 s1 = highest_value(first_hand_ptr, p1_values, i, 0);
+                    u8 s2 = highest_value(second_hand_ptr, p2_values, i, 0);
+                    if (s1 > s2) {
+                        p1_score++;
+                        break;
+                    } else if (s2 > s1) {
+                        break;
+                    }
+                }
+                break;
+            case ONE_PAIR:
+                to_values(first_hand_ptr,  p1_values);
+                to_values(second_hand_ptr, p2_values);
+                u8 s1 = highest_value(first_hand_ptr, p1_values,  0, 2);
+                u8 s2 = highest_value(second_hand_ptr, p2_values, 0, 2);
+                if (s1 > s2) {
+                    p1_score++;
+                }
+                break;
+            }
         }
 
-        first_hand_ptr += (HAND_LEN + 1) * 2;
+        first_hand_ptr  += (HAND_LEN + 1) * 2;
         second_hand_ptr += (HAND_LEN + 1) * 2;
     }
 
